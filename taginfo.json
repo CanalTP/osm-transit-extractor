@@ -66,7 +66,7 @@
         {
             "key": "public_transport",
             "value": "stop_area",
-            "object_types": ["relation"],
+            "object_types": ["relation"]
         }
     ]
 }
