@@ -257,7 +257,7 @@ fn is_stop_area(obj: &osmpbfreader::OsmObj) -> bool {
 fn is_pt_route_type(
     osm_id: osmpbfreader::objects::RelationId,
     tag_name: &str,
-    route_type: Option<&String>,
+    route_type: Option<&str>,
 ) -> bool {
     let non_pt_route_type = vec![
         "bicycle",
@@ -300,8 +300,8 @@ fn is_pt_route_type(
     ];
     match route_type {
         Some(r) => {
-            let is_in_white_list = pt_route_type.contains(&r.as_str());
-            let is_in_black_list = non_pt_route_type.contains(&r.as_str());
+            let is_in_white_list = pt_route_type.contains(&r);
+            let is_in_black_list = non_pt_route_type.contains(&r);
             if !is_in_white_list && !is_in_black_list {
                 warn!("tag {} is unknown : relation {} is extracted. Update mode list in crate to remove this message.", tag_name, osm_id.0);
             }
@@ -324,7 +324,7 @@ fn is_line(obj: &osmpbfreader::OsmObj) -> bool {
         && is_pt_route_type(
             obj.id().relation().unwrap(),
             route_type,
-            obj.tags().get(route_type),
+            obj.tags().get(route_type).map(|s| s.as_str()),
         )
 }
 
@@ -335,7 +335,7 @@ fn is_route(obj: &osmpbfreader::OsmObj) -> bool {
         && is_pt_route_type(
             obj.id().relation().unwrap(),
             route_type,
-            obj.tags().get(route_type),
+            obj.tags().get(route_type).map(|s| s.as_str()),
         )
 }
 
@@ -467,22 +467,22 @@ fn osm_obj_to_route(
     let osm_tags = obj.tags().clone();
     obj.relation().map(|rel| Route {
         id: format!("relation:{}", rel.id.0),
-        name: rel.tags.get("name").cloned().unwrap_or_default(),
-        code: rel.tags.get("ref").cloned().unwrap_or_default(),
-        destination: rel.tags.get("to").cloned().unwrap_or_default(),
-        origin: rel.tags.get("from").cloned().unwrap_or_default(),
-        mode: rel.tags.get("route").cloned().unwrap_or_default(),
-        colour: rel.tags.get("colour").cloned().unwrap_or_default(),
-        operator: rel.tags.get("operator").cloned().unwrap_or_default(),
-        network: rel.tags.get("network").cloned().unwrap_or_default(),
-        frequency: rel.tags.get("interval").cloned().unwrap_or_default(),
-        opening_hours: rel.tags.get("opening_hours").cloned().unwrap_or_default(),
+        name: rel.tags.get("name").map_or("", |s| &s).into(),
+        code: rel.tags.get("ref").map_or("", |s| &s).into(),
+        destination: rel.tags.get("to").map_or("", |s| &s).into(),
+        origin: rel.tags.get("from").map_or("", |s| &s).into(),
+        mode: rel.tags.get("route").map_or("", |s| &s).into(),
+        colour: rel.tags.get("colour").map_or("", |s| &s).into(),
+        operator: rel.tags.get("operator").map_or("", |s| &s).into(),
+        network: rel.tags.get("network").map_or("", |s| &s).into(),
+        frequency: rel.tags.get("interval").map_or("", |s| &s).into(),
+        opening_hours: rel.tags.get("opening_hours").map_or("", |s| &s).into(),
         frequency_exceptions: rel
             .tags
             .get("interval:conditional")
-            .cloned()
-            .unwrap_or_default(),
-        travel_time: rel.tags.get("duration").cloned().unwrap_or_default(),
+            .map_or("", |s| &s)
+            .into(),
+        travel_time: rel.tags.get("duration").map_or("", |s| &s).into(),
         all_osm_tags: osm_tags,
         ordered_route_points: osm_route_to_route_points_list(rel),
         shape: osm_route_to_shape(obj_map, rel),
@@ -496,19 +496,19 @@ fn osm_obj_to_line(
     let osm_tags = obj.tags().clone();
     obj.relation().map(|rel| Line {
         id: format!("relation:{}", rel.id.0),
-        name: rel.tags.get("name").cloned().unwrap_or_default(),
-        code: rel.tags.get("ref").cloned().unwrap_or_default(),
-        colour: rel.tags.get("colour").cloned().unwrap_or_default(),
-        mode: rel.tags.get("route_master").cloned().unwrap_or_default(),
-        operator: rel.tags.get("operator").cloned().unwrap_or_default(),
-        network: rel.tags.get("network").cloned().unwrap_or_default(),
-        frequency: rel.tags.get("interval").cloned().unwrap_or_default(),
-        opening_hours: rel.tags.get("opening_hours").cloned().unwrap_or_default(),
+        name: rel.tags.get("name").map_or("", |s| &s).into(),
+        code: rel.tags.get("ref").map_or("", |s| &s).into(),
+        colour: rel.tags.get("colour").map_or("", |s| &s).into(),
+        mode: rel.tags.get("route_master").map_or("", |s| &s).into(),
+        operator: rel.tags.get("operator").map_or("", |s| &s).into(),
+        network: rel.tags.get("network").map_or("", |s| &s).into(),
+        frequency: rel.tags.get("interval").map_or("", |s| &s).into(),
+        opening_hours: rel.tags.get("opening_hours").map_or("", |s| &s).into(),
         frequency_exceptions: rel
             .tags
             .get("interval:conditional")
-            .cloned()
-            .unwrap_or_default(),
+            .map_or("", |s| &s)
+            .into(),
         all_osm_tags: osm_tags,
         shape: osm_line_to_shape(obj_map, &rel.refs),
         routes_id: osm_line_to_routes_list(rel),
@@ -531,7 +531,7 @@ fn osm_obj_to_stop_point(
             },
         ),
     };
-    let name = obj.tags().get("name").cloned().unwrap_or_default();
+    let name = obj.tags().get("name").map_or("", |s| &s).into();
     let id = format!("{}:{}", obj_type, obj_id);
     let osm_tags = obj.tags().clone();
     StopPoint {
@@ -549,7 +549,7 @@ fn osm_obj_to_stop_area(
 ) -> StopArea {
     let rel = &*obj.relation().unwrap();
     let (obj_type, obj_id, coord) = ("relation", rel.id.0, get_one_coord_from_rel(obj_map, &rel));
-    let name = obj.tags().get("name").cloned().unwrap_or_default();
+    let name = obj.tags().get("name").map_or("", |s| &s).into();
     let osm_tags = obj.tags().clone();
     StopArea {
         id: format!("{}:{}", obj_type, obj_id),
@@ -725,12 +725,11 @@ pub fn write_stop_points_to_csv<P: AsRef<Path>>(
         if all_tags {
             csv_row = csv_row
                 .into_iter()
-                .chain(osm_tag_list.iter().map(|k| {
-                    sp.all_osm_tags
-                        .get(k)
-                        .map_or("", |s| s.as_str())
-                        .to_string()
-                }))
+                .chain(
+                    osm_tag_list
+                        .iter()
+                        .map(|k| sp.all_osm_tags.get(k.as_str()).map_or("", |s| &s).into()),
+                )
                 .collect();
         }
         wtr.serialize(csv_row).unwrap();
@@ -791,12 +790,11 @@ pub fn write_stop_areas_to_csv<P: AsRef<Path>>(
         if all_tags {
             csv_row = csv_row
                 .into_iter()
-                .chain(osm_tag_list.iter().map(|k| {
-                    sa.all_osm_tags
-                        .get(k)
-                        .map_or("", |s| s.as_str())
-                        .to_string()
-                }))
+                .chain(
+                    osm_tag_list
+                        .iter()
+                        .map(|k| sa.all_osm_tags.get(k.as_str()).map_or("", |s| &s).into()),
+                )
                 .collect();
         }
         wtr.serialize(csv_row).unwrap();
@@ -867,7 +865,7 @@ pub fn write_routes_to_csv<P: AsRef<Path>>(routes: Vec<Route>, output_dir: P, al
                 .chain(
                     osm_tag_list
                         .iter()
-                        .map(|k| r.all_osm_tags.get(k).map_or("", |s| s.as_str()).to_string()),
+                        .map(|k| r.all_osm_tags.get(k.as_str()).map_or("", |s| &s).into()),
                 )
                 .collect();
         }
@@ -943,7 +941,7 @@ pub fn write_lines_to_csv<P: AsRef<Path>>(lines: Vec<Line>, output_dir: P, all_t
                 .chain(
                     osm_tag_list
                         .iter()
-                        .map(|k| l.all_osm_tags.get(k).map_or("", |s| s.as_str()).to_string()),
+                        .map(|k| l.all_osm_tags.get(k.as_str()).map_or("", |s| &s).into()),
                 )
                 .collect();
         }
