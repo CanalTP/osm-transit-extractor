@@ -126,6 +126,17 @@ pub struct Route {
     pub shape: Vec<Vec<Coord>>,
 }
 
+// small utility since we'll get very often a tag as string
+trait ToDefaultString {
+    fn get_default_string(&self, key: &str) -> String;
+}
+
+impl ToDefaultString for osmpbfreader::objects::Tags {
+    fn get_default_string(&self, key: &str) -> String {
+        self.get(key).map_or_else(String::new, ToString::to_string)
+    }
+}
+
 impl Route {
     fn contains_stop_point_id(&self, stop_point_id: &str) -> bool {
         self.ordered_route_points
@@ -467,22 +478,18 @@ fn osm_obj_to_route(
     let osm_tags = obj.tags().clone();
     obj.relation().map(|rel| Route {
         id: format!("relation:{}", rel.id.0),
-        name: rel.tags.get("name").map_or("", |s| &s).into(),
-        code: rel.tags.get("ref").map_or("", |s| &s).into(),
-        destination: rel.tags.get("to").map_or("", |s| &s).into(),
-        origin: rel.tags.get("from").map_or("", |s| &s).into(),
-        mode: rel.tags.get("route").map_or("", |s| &s).into(),
-        colour: rel.tags.get("colour").map_or("", |s| &s).into(),
-        operator: rel.tags.get("operator").map_or("", |s| &s).into(),
-        network: rel.tags.get("network").map_or("", |s| &s).into(),
-        frequency: rel.tags.get("interval").map_or("", |s| &s).into(),
-        opening_hours: rel.tags.get("opening_hours").map_or("", |s| &s).into(),
-        frequency_exceptions: rel
-            .tags
-            .get("interval:conditional")
-            .map_or("", |s| &s)
-            .into(),
-        travel_time: rel.tags.get("duration").map_or("", |s| &s).into(),
+        name: rel.tags.get_default_string("name"),
+        code: rel.tags.get_default_string("ref"),
+        destination: rel.tags.get_default_string("to"),
+        origin: rel.tags.get_default_string("from"),
+        mode: rel.tags.get_default_string("route"),
+        colour: rel.tags.get_default_string("colour"),
+        operator: rel.tags.get_default_string("operator"),
+        network: rel.tags.get_default_string("network"),
+        frequency: rel.tags.get_default_string("interval"),
+        opening_hours: rel.tags.get_default_string("opening_hours"),
+        frequency_exceptions: rel.tags.get_default_string("interval:conditional"),
+        travel_time: rel.tags.get_default_string("duration"),
         all_osm_tags: osm_tags,
         ordered_route_points: osm_route_to_route_points_list(rel),
         shape: osm_route_to_shape(obj_map, rel),
@@ -496,19 +503,15 @@ fn osm_obj_to_line(
     let osm_tags = obj.tags().clone();
     obj.relation().map(|rel| Line {
         id: format!("relation:{}", rel.id.0),
-        name: rel.tags.get("name").map_or("", |s| &s).into(),
-        code: rel.tags.get("ref").map_or("", |s| &s).into(),
-        colour: rel.tags.get("colour").map_or("", |s| &s).into(),
-        mode: rel.tags.get("route_master").map_or("", |s| &s).into(),
-        operator: rel.tags.get("operator").map_or("", |s| &s).into(),
-        network: rel.tags.get("network").map_or("", |s| &s).into(),
-        frequency: rel.tags.get("interval").map_or("", |s| &s).into(),
-        opening_hours: rel.tags.get("opening_hours").map_or("", |s| &s).into(),
-        frequency_exceptions: rel
-            .tags
-            .get("interval:conditional")
-            .map_or("", |s| &s)
-            .into(),
+        name: rel.tags.get_default_string("name"),
+        code: rel.tags.get_default_string("ref"),
+        colour: rel.tags.get_default_string("colour"),
+        mode: rel.tags.get_default_string("route_master"),
+        operator: rel.tags.get_default_string("operator"),
+        network: rel.tags.get_default_string("network"),
+        frequency: rel.tags.get_default_string("interval"),
+        opening_hours: rel.tags.get_default_string("opening_hours"),
+        frequency_exceptions: rel.tags.get_default_string("interval:conditional"),
         all_osm_tags: osm_tags,
         shape: osm_line_to_shape(obj_map, &rel.refs),
         routes_id: osm_line_to_routes_list(rel),
@@ -531,7 +534,7 @@ fn osm_obj_to_stop_point(
             },
         ),
     };
-    let name = obj.tags().get("name").map_or("", |s| &s).into();
+    let name = obj.tags().get_default_string("name");
     let id = format!("{}:{}", obj_type, obj_id);
     let osm_tags = obj.tags().clone();
     StopPoint {
@@ -549,13 +552,11 @@ fn osm_obj_to_stop_area(
 ) -> StopArea {
     let rel = &*obj.relation().unwrap();
     let (obj_type, obj_id, coord) = ("relation", rel.id.0, get_one_coord_from_rel(obj_map, &rel));
-    let name = obj.tags().get("name").map_or("", |s| &s).into();
-    let osm_tags = obj.tags().clone();
     StopArea {
         id: format!("{}:{}", obj_type, obj_id),
-        name,
+        name: obj.tags().get_default_string("name"),
         coord,
-        all_osm_tags: osm_tags,
+        all_osm_tags: obj.tags().clone(),
         stop_point_ids: osm_stop_area_to_stop_point_list(rel),
     }
 }
@@ -728,7 +729,7 @@ pub fn write_stop_points_to_csv<P: AsRef<Path>>(
                 .chain(
                     osm_tag_list
                         .iter()
-                        .map(|k| sp.all_osm_tags.get(k.as_str()).map_or("", |s| &s).into()),
+                        .map(|k| sp.all_osm_tags.get_default_string(k.as_str())),
                 )
                 .collect();
         }
@@ -793,7 +794,7 @@ pub fn write_stop_areas_to_csv<P: AsRef<Path>>(
                 .chain(
                     osm_tag_list
                         .iter()
-                        .map(|k| sa.all_osm_tags.get(k.as_str()).map_or("", |s| &s).into()),
+                        .map(|k| sa.all_osm_tags.get_default_string(k.as_str())),
                 )
                 .collect();
         }
@@ -865,7 +866,7 @@ pub fn write_routes_to_csv<P: AsRef<Path>>(routes: Vec<Route>, output_dir: P, al
                 .chain(
                     osm_tag_list
                         .iter()
-                        .map(|k| r.all_osm_tags.get(k.as_str()).map_or("", |s| &s).into()),
+                        .map(|k| r.all_osm_tags.get_default_string(k.as_str())),
                 )
                 .collect();
         }
@@ -941,7 +942,7 @@ pub fn write_lines_to_csv<P: AsRef<Path>>(lines: Vec<Line>, output_dir: P, all_t
                 .chain(
                     osm_tag_list
                         .iter()
-                        .map(|k| l.all_osm_tags.get(k.as_str()).map_or("", |s| &s).into()),
+                        .map(|k| l.all_osm_tags.get_default_string(k.as_str())),
                 )
                 .collect();
         }
