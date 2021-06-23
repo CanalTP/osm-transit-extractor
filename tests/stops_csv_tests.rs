@@ -160,6 +160,29 @@ pub fn osm_fixture_stoppoints_csv() {
 }
 
 #[test]
+pub fn osm_fixture_stationaccesses_csv() {
+    let osm_path = std::env::current_dir()
+        .unwrap()
+        .join("tests/fixtures/station.osm.pbf");
+    let mut parsed_pbf = osmpbfreader::OsmPbfReader::new(std::fs::File::open(&osm_path).unwrap());
+    let accesses = osm_transit_extractor::get_station_accesses_from_osm(&mut parsed_pbf);
+    let tmp_dir = Builder::new()
+        .prefix("osm_transit_extractor")
+        .tempdir()
+        .expect("create temp dir");
+    osm_transit_extractor::write_station_accesses_to_csv(&accesses, &tmp_dir, false);
+    let file_path = tmp_dir
+        .path()
+        .join("osm-transit-extractor_station_accesses.csv");
+    assert!(file_path.is_file());
+    let file = File::open(file_path).unwrap();
+    let reader = BufReader::new(file);
+    assert_eq!(6, reader.lines().count());
+
+    tmp_dir.close().expect("delete temp dir");
+}
+
+#[test]
 pub fn osm_fixture_stopareas_stoppoints_csv() {
     let osm_path = std::env::current_dir()
         .unwrap()
@@ -178,6 +201,28 @@ pub fn osm_fixture_stopareas_stoppoints_csv() {
     let file = File::open(file_path).unwrap();
     let reader = BufReader::new(file);
     assert_eq!(3, reader.lines().count());
+    tmp_dir.close().expect("delete temp dir");
+}
+
+#[test]
+pub fn osm_fixture_stopareas_stationaccesses_csv() {
+    let osm_path = std::env::current_dir()
+        .unwrap()
+        .join("tests/fixtures/station.osm.pbf");
+    let mut parsed_pbf = osmpbfreader::OsmPbfReader::new(std::fs::File::open(&osm_path).unwrap());
+    let stop_areas = osm_transit_extractor::get_stop_areas_from_osm(&mut parsed_pbf);
+    let tmp_dir = Builder::new()
+        .prefix("osm_transit_extractor")
+        .tempdir()
+        .expect("create temp dir");
+    osm_transit_extractor::write_stop_areas_station_accesses_to_csv(&stop_areas, &tmp_dir);
+    let file_path = tmp_dir
+        .path()
+        .join("osm-transit-extractor_stop_areas_station_accesses.csv");
+    assert!(file_path.is_file());
+    let file = File::open(file_path).unwrap();
+    let reader = BufReader::new(file);
+    assert_eq!(6, reader.lines().count());
     tmp_dir.close().expect("delete temp dir");
 }
 

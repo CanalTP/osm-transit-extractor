@@ -814,6 +814,54 @@ pub fn write_stop_points_to_csv<P: AsRef<Path>>(
     }
 }
 
+pub fn write_station_accesses_to_csv<P: AsRef<Path>>(
+    station_accesses: &[StationAccess],
+    output_dir: P,
+    all_tags: bool,
+) {
+    let output_dir = output_dir.as_ref();
+    let csv_file = output_dir.join("osm-transit-extractor_station_accesses.csv");
+
+    let mut wtr = csv::Writer::from_path(csv_file).unwrap();
+    let default_header = ["station_access_id", "lat", "lon", "name", "code"];
+    let osm_tag_list: BTreeSet<String> = station_accesses
+        .iter()
+        .flat_map(|s| s.all_osm_tags.keys().map(|s| s.to_string()))
+        .collect();
+    if all_tags {
+        let osm_header = osm_tag_list.iter().map(|s| format!("osm:{}", s));
+        let v: Vec<_> = default_header
+            .iter()
+            .map(|&s| s.to_string())
+            .chain(osm_header)
+            .collect();
+        wtr.serialize(v).unwrap();
+    } else {
+        wtr.serialize(default_header).unwrap();
+    }
+
+    for access in station_accesses {
+        let mut csv_row = vec![
+            format!("StationAccess:{}", access.id),
+            access.coord.lat.to_string(),
+            access.coord.lon.to_string(),
+            access.name.to_string(),
+            access.code.to_string(),
+        ];
+        if all_tags {
+            csv_row = csv_row
+                .into_iter()
+                .chain(
+                    osm_tag_list
+                        .iter()
+                        .map(|k| access.all_osm_tags.get_default_string(k.as_str())),
+                )
+                .collect();
+        }
+        wtr.serialize(csv_row).unwrap();
+    }
+}
+
 pub fn write_stop_areas_stop_point_to_csv<P: AsRef<Path>>(stop_areas: &[StopArea], output_dir: P) {
     let output_dir = output_dir.as_ref();
     let csv_file = output_dir.join("osm-transit-extractor_stop_areas_stop_point.csv");
@@ -826,6 +874,27 @@ pub fn write_stop_areas_stop_point_to_csv<P: AsRef<Path>>(stop_areas: &[StopArea
             let csv_row = vec![
                 format!("StopArea:{}", sa.id),
                 format!("StopPoint:{}", sp_id),
+            ];
+            wtr.serialize(csv_row).unwrap();
+        }
+    }
+}
+
+pub fn write_stop_areas_station_accesses_to_csv<P: AsRef<Path>>(
+    stop_areas: &[StopArea],
+    output_dir: P,
+) {
+    let output_dir = output_dir.as_ref();
+    let csv_file = output_dir.join("osm-transit-extractor_stop_areas_station_accesses.csv");
+
+    let mut wtr = csv::Writer::from_path(csv_file).unwrap();
+    let default_header = ["stop_area_id", "station_access_id"];
+    wtr.serialize(default_header).unwrap();
+    for sa in stop_areas {
+        for access_id in &sa.station_access_ids {
+            let csv_row = vec![
+                format!("StopArea:{}", sa.id),
+                format!("StationAccess:{}", access_id),
             ];
             wtr.serialize(csv_row).unwrap();
         }

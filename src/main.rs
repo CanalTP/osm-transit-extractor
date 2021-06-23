@@ -78,8 +78,15 @@ fn main() {
         &args.output,
         args.dump_all_tags,
     );
+
+    write_station_accesses_to_csv(
+        &osmtc_response.station_accesses,
+        &args.output,
+        args.dump_all_tags,
+    );
     write_stop_areas_to_csv(&osmtc_response.stop_areas, &args.output, args.dump_all_tags);
     write_stop_areas_stop_point_to_csv(&osmtc_response.stop_areas, &args.output);
+    write_stop_areas_station_accesses_to_csv(&osmtc_response.stop_areas, &args.output);
 
     if osmtc_response.routes.is_some() {
         write_routes_to_csv(
