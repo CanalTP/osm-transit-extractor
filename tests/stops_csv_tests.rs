@@ -47,6 +47,31 @@ pub fn osm_fixture_stopareas() {
 }
 
 #[test]
+pub fn osm_fixture_stationaccesses() {
+    let osm_path = std::env::current_dir()
+        .unwrap()
+        .join("tests/fixtures/station.osm.pbf");
+    let mut parsed_pbf = osmpbfreader::OsmPbfReader::new(std::fs::File::open(&osm_path).unwrap());
+    let accesses = osm_transit_extractor::get_station_accesses_from_osm(&mut parsed_pbf);
+    assert_eq!(accesses.len(), 5);
+    let station_access_ids: Vec<&String> = accesses.iter().map(|access| &access.id).collect();
+    assert!(station_access_ids.contains(&&String::from("node:6024574088")));
+}
+
+#[test]
+pub fn osm_fixture_stopareas_stationaccesses() {
+    let osm_path = std::env::current_dir()
+        .unwrap()
+        .join("tests/fixtures/station.osm.pbf");
+    let mut parsed_pbf = osmpbfreader::OsmPbfReader::new(std::fs::File::open(&osm_path).unwrap());
+    let stop_areas = osm_transit_extractor::get_stop_areas_from_osm(&mut parsed_pbf);
+    assert_eq!(stop_areas.len(), 1);
+    assert!(stop_areas[0]
+        .station_access_ids
+        .contains(&String::from("node:6024574088")));
+}
+
+#[test]
 pub fn osm_fixture_routes_count() {
     let osm_path = std::env::current_dir()
         .unwrap()
