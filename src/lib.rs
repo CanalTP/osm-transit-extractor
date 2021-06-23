@@ -456,11 +456,8 @@ fn osm_stop_area_to_station_access_list(
         .filter(|refe| !is_stop(*refe))
         .filter_map(|refe| obj_map.get(&refe.member))
         .filter(|osm_obj| is_station_access(*osm_obj))
-        .map(|osm_obj| match osm_obj.id() {
-            osmpbfreader::OsmId::Node(obj_id) => format!("node:{}", obj_id.0),
-            osmpbfreader::OsmId::Way(obj_id) => format!("way:{}", obj_id.0),
-            osmpbfreader::OsmId::Relation(obj_id) => format!("relation:{}", obj_id.0),
-        })
+        .filter_map(|osm_obj| osmpbfreader::OsmObj::node(osm_obj))
+        .map(|node| format!("node:{}", node.id.0))
         .collect()
 }
 
@@ -581,31 +578,17 @@ fn osm_obj_to_stop_point(
     }
 }
 
-fn osm_obj_to_station_access(
-    obj_map: &BTreeMap<osmpbfreader::OsmId, osmpbfreader::OsmObj>,
-    obj: &osmpbfreader::OsmObj,
-) -> StationAccess {
-    let (obj_type, obj_id, coord) = match *obj {
-        Relation(ref rel) => ("relation", rel.id.0, get_one_coord_from_rel(obj_map, rel)),
-        Way(ref way) => ("way", way.id.0, get_one_coord_from_way(obj_map, way)),
-        Node(ref node) => (
-            "node",
-            node.id.0,
-            Coord {
-                lat: node.lat(),
-                lon: node.lon(),
-            },
-        ),
-    };
-    let name = obj.tags().get_default_string("name");
-    let code = obj.tags().get_default_string("ref");
-    let id = format!("{}:{}", obj_type, obj_id);
+fn osm_obj_to_station_access(obj: &osmpbfreader::OsmObj) -> StationAccess {
+    let node = &*obj.node().unwrap();
     let osm_tags = obj.tags().clone();
     StationAccess {
-        id,
-        name,
-        code,
-        coord,
+        id: format!("node:{}", node.id.0),
+        name: obj.tags().get_default_string("name"),
+        code: obj.tags().get_default_string("ref"),
+        coord: Coord {
+            lat: node.lat(),
+            lon: node.lon(),
+        },
         all_osm_tags: osm_tags,
     }
 }
@@ -653,7 +636,7 @@ pub fn get_station_accesses_from_osm(pbf: &mut OsmPbfReader) -> Vec<StationAcces
     objects
         .values()
         .filter(|x| is_station_access(*x))
-        .map(|obj| osm_obj_to_station_access(&objects, obj))
+        .map(|obj| osm_obj_to_station_access(obj))
         .collect()
 }
 
