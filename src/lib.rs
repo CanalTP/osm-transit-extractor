@@ -730,7 +730,7 @@ pub fn get_osm_tcobjects(parsed_pbf: &mut OsmPbfReader, stops_only: bool) -> Osm
     if stops_only {
         OsmTcResponse {
             stop_points,
-            station_accesses: station_accesses,
+            station_accesses,
             stop_areas,
             routes: None,
             lines: None,
@@ -741,7 +741,7 @@ pub fn get_osm_tcobjects(parsed_pbf: &mut OsmPbfReader, stops_only: bool) -> Osm
         update_stop_points_type(&mut stop_points, &routes);
         OsmTcResponse {
             stop_points,
-            station_accesses: station_accesses,
+            station_accesses,
             stop_areas,
             routes: Some(routes),
             lines: Some(lines),
