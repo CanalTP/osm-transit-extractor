@@ -578,18 +578,20 @@ fn osm_obj_to_stop_point(
     }
 }
 
-fn osm_obj_to_station_access(obj: &osmpbfreader::OsmObj) -> StationAccess {
-    let node = &*obj.node().unwrap();
-    let osm_tags = obj.tags().clone();
-    StationAccess {
-        id: format!("node:{}", node.id.0),
-        name: obj.tags().get_default_string("name"),
-        code: obj.tags().get_default_string("ref"),
-        coord: Coord {
-            lat: node.lat(),
-            lon: node.lon(),
-        },
-        all_osm_tags: osm_tags,
+impl From<&osmpbfreader::OsmObj> for StationAccess {
+    fn from(obj: &osmpbfreader::OsmObj) -> Self {
+        let node = &*obj.node().unwrap();
+        let osm_tags = obj.tags().clone();
+        StationAccess {
+            id: format!("node:{}", node.id.0),
+            name: obj.tags().get_default_string("name"),
+            code: obj.tags().get_default_string("ref"),
+            coord: Coord {
+                lat: node.lat(),
+                lon: node.lon(),
+            },
+            all_osm_tags: osm_tags,
+        }
     }
 }
 
@@ -636,7 +638,7 @@ pub fn get_station_accesses_from_osm(pbf: &mut OsmPbfReader) -> Vec<StationAcces
     objects
         .values()
         .filter(|x| is_station_access(*x))
-        .map(|obj| osm_obj_to_station_access(obj))
+        .map(StationAccess::from)
         .collect()
 }
 
@@ -807,7 +809,7 @@ pub fn write_station_accesses_to_csv<P: AsRef<Path>>(
 
     let mut wtr = csv::Writer::from_path(csv_file).unwrap();
     let default_header = ["station_access_id", "lat", "lon", "name", "code"];
-    let osm_tag_list: BTreeSet<String> = station_accesses
+    let osm_tag_list: BTreeSet<_> = station_accesses
         .iter()
         .flat_map(|s| s.all_osm_tags.keys().map(|s| s.to_string()))
         .collect();
@@ -815,7 +817,7 @@ pub fn write_station_accesses_to_csv<P: AsRef<Path>>(
         let osm_header = osm_tag_list.iter().map(|s| format!("osm:{}", s));
         let v: Vec<_> = default_header
             .iter()
-            .map(|&s| s.to_string())
+            .map(ToString::to_string)
             .chain(osm_header)
             .collect();
         wtr.serialize(v).unwrap();
@@ -837,7 +839,7 @@ pub fn write_station_accesses_to_csv<P: AsRef<Path>>(
                 .chain(
                     osm_tag_list
                         .iter()
-                        .map(|k| access.all_osm_tags.get_default_string(k.as_str())),
+                        .map(|k| access.all_osm_tags.get_default_string(&k)),
                 )
                 .collect();
         }
