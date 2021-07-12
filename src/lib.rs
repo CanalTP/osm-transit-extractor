@@ -811,7 +811,7 @@ pub fn write_station_accesses_to_csv<P: AsRef<Path>>(
     let default_header = ["station_access_id", "lat", "lon", "name", "code"];
     let osm_tag_list: BTreeSet<_> = station_accesses
         .iter()
-        .flat_map(|s| s.all_osm_tags.keys().map(|s| s.to_string()))
+        .flat_map(|s| s.all_osm_tags.keys())
         .collect();
     if all_tags {
         let osm_header = osm_tag_list.iter().map(|s| format!("osm:{}", s));
