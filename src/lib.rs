@@ -92,12 +92,22 @@ pub struct StopPoint {
 }
 
 #[derive(Debug, Clone)]
+pub struct StationAccess {
+    pub id: String,
+    pub coord: Coord,
+    pub name: String,
+    pub code: String,
+    pub all_osm_tags: osmpbfreader::objects::Tags,
+}
+
+#[derive(Debug, Clone)]
 pub struct StopArea {
     pub id: String,
     pub coord: Coord,
     pub name: String,
     pub all_osm_tags: osmpbfreader::objects::Tags,
     pub stop_point_ids: Vec<String>,
+    pub station_access_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -243,6 +253,7 @@ fn shape_to_wkt(shape: &[Vec<Coord>]) -> String {
 
 pub struct OsmTcResponse {
     pub stop_points: Vec<StopPoint>,
+    pub station_accesses: Vec<StationAccess>,
     pub stop_areas: Vec<StopArea>,
     pub routes: Option<Vec<Route>>,
     pub lines: Option<Vec<Line>>,
@@ -259,6 +270,12 @@ fn is_stop_point(obj: &osmpbfreader::OsmObj) -> bool {
             || obj.tags().contains("public_transport", "stop_position")
             || obj.tags().contains("highway", "bus_stop")
             || obj.tags().contains("railway", "tram_stop"))
+}
+
+fn is_station_access(obj: &osmpbfreader::OsmObj) -> bool {
+    obj.is_node()
+        && (obj.tags().contains("railway", "subway_entrance")
+            || obj.tags().contains("railway", "train_station_entrance"))
 }
 
 fn is_stop_area(obj: &osmpbfreader::OsmObj) -> bool {
@@ -429,6 +446,21 @@ fn osm_route_to_shape(
         .collect()
 }
 
+fn osm_stop_area_to_station_access_list(
+    obj_map: &BTreeMap<osmpbfreader::OsmId, osmpbfreader::OsmObj>,
+    osm_relation: &osmpbfreader::Relation,
+) -> Vec<String> {
+    osm_relation
+        .refs
+        .iter()
+        .filter(|refe| !is_stop(*refe))
+        .filter_map(|refe| obj_map.get(&refe.member))
+        .filter(|osm_obj| is_station_access(*osm_obj))
+        .filter_map(|osm_obj| osmpbfreader::OsmObj::node(osm_obj))
+        .map(|node| format!("node:{}", node.id.0))
+        .collect()
+}
+
 fn osm_line_to_shape(
     obj_map: &BTreeMap<osmpbfreader::OsmId, osmpbfreader::OsmObj>,
     osm_relations_ref: &[osmpbfreader::Ref],
@@ -546,6 +578,23 @@ fn osm_obj_to_stop_point(
     }
 }
 
+impl From<&osmpbfreader::OsmObj> for StationAccess {
+    fn from(obj: &osmpbfreader::OsmObj) -> Self {
+        let node = &*obj.node().unwrap();
+        let osm_tags = obj.tags().clone();
+        StationAccess {
+            id: format!("node:{}", node.id.0),
+            name: obj.tags().get_default_string("name"),
+            code: obj.tags().get_default_string("ref"),
+            coord: Coord {
+                lat: node.lat(),
+                lon: node.lon(),
+            },
+            all_osm_tags: osm_tags,
+        }
+    }
+}
+
 fn osm_obj_to_stop_area(
     obj_map: &BTreeMap<osmpbfreader::OsmId, osmpbfreader::OsmObj>,
     obj: &osmpbfreader::OsmObj,
@@ -558,6 +607,7 @@ fn osm_obj_to_stop_area(
         coord,
         all_osm_tags: obj.tags().clone(),
         stop_point_ids: osm_stop_area_to_stop_point_list(rel),
+        station_access_ids: osm_stop_area_to_station_access_list(obj_map, rel),
     }
 }
 
@@ -580,6 +630,15 @@ pub fn get_stop_points_from_osm(pbf: &mut OsmPbfReader) -> Vec<StopPoint> {
         .values()
         .filter(|x| is_stop_point(*x))
         .map(|obj| osm_obj_to_stop_point(&objects, obj))
+        .collect()
+}
+
+pub fn get_station_accesses_from_osm(pbf: &mut OsmPbfReader) -> Vec<StationAccess> {
+    let objects = pbf.get_objs_and_deps(is_station_access).unwrap();
+    objects
+        .values()
+        .filter(|x| is_station_access(*x))
+        .map(StationAccess::from)
         .collect()
 }
 
@@ -668,10 +727,12 @@ pub fn update_stop_points_type(stop_points: &mut [StopPoint], routes: &[Route]) 
 
 pub fn get_osm_tcobjects(parsed_pbf: &mut OsmPbfReader, stops_only: bool) -> OsmTcResponse {
     let mut stop_points = get_stop_points_from_osm(parsed_pbf);
+    let station_accesses = get_station_accesses_from_osm(parsed_pbf);
     let stop_areas = get_stop_areas_from_osm(parsed_pbf);
     if stops_only {
         OsmTcResponse {
             stop_points,
+            station_accesses,
             stop_areas,
             routes: None,
             lines: None,
@@ -682,6 +743,7 @@ pub fn get_osm_tcobjects(parsed_pbf: &mut OsmPbfReader, stops_only: bool) -> Osm
         update_stop_points_type(&mut stop_points, &routes);
         OsmTcResponse {
             stop_points,
+            station_accesses,
             stop_areas,
             routes: Some(routes),
             lines: Some(lines),
@@ -737,6 +799,54 @@ pub fn write_stop_points_to_csv<P: AsRef<Path>>(
     }
 }
 
+pub fn write_station_accesses_to_csv<P: AsRef<Path>>(
+    station_accesses: &[StationAccess],
+    output_dir: P,
+    all_tags: bool,
+) {
+    let output_dir = output_dir.as_ref();
+    let csv_file = output_dir.join("osm-transit-extractor_station_accesses.csv");
+
+    let mut wtr = csv::Writer::from_path(csv_file).unwrap();
+    let default_header = ["station_access_id", "lat", "lon", "name", "code"];
+    let osm_tag_list: BTreeSet<_> = station_accesses
+        .iter()
+        .flat_map(|s| s.all_osm_tags.keys())
+        .collect();
+    if all_tags {
+        let osm_header = osm_tag_list.iter().map(|s| format!("osm:{}", s));
+        let v: Vec<_> = default_header
+            .iter()
+            .map(ToString::to_string)
+            .chain(osm_header)
+            .collect();
+        wtr.serialize(v).unwrap();
+    } else {
+        wtr.serialize(default_header).unwrap();
+    }
+
+    for access in station_accesses {
+        let mut csv_row = vec![
+            format!("StationAccess:{}", access.id),
+            access.coord.lat.to_string(),
+            access.coord.lon.to_string(),
+            access.name.to_string(),
+            access.code.to_string(),
+        ];
+        if all_tags {
+            csv_row = csv_row
+                .into_iter()
+                .chain(
+                    osm_tag_list
+                        .iter()
+                        .map(|k| access.all_osm_tags.get_default_string(&k)),
+                )
+                .collect();
+        }
+        wtr.serialize(csv_row).unwrap();
+    }
+}
+
 pub fn write_stop_areas_stop_point_to_csv<P: AsRef<Path>>(stop_areas: &[StopArea], output_dir: P) {
     let output_dir = output_dir.as_ref();
     let csv_file = output_dir.join("osm-transit-extractor_stop_areas_stop_point.csv");
@@ -749,6 +859,27 @@ pub fn write_stop_areas_stop_point_to_csv<P: AsRef<Path>>(stop_areas: &[StopArea
             let csv_row = vec![
                 format!("StopArea:{}", sa.id),
                 format!("StopPoint:{}", sp_id),
+            ];
+            wtr.serialize(csv_row).unwrap();
+        }
+    }
+}
+
+pub fn write_stop_areas_station_accesses_to_csv<P: AsRef<Path>>(
+    stop_areas: &[StopArea],
+    output_dir: P,
+) {
+    let output_dir = output_dir.as_ref();
+    let csv_file = output_dir.join("osm-transit-extractor_stop_areas_station_accesses.csv");
+
+    let mut wtr = csv::Writer::from_path(csv_file).unwrap();
+    let default_header = ["stop_area_id", "station_access_id"];
+    wtr.serialize(default_header).unwrap();
+    for sa in stop_areas {
+        for access_id in &sa.station_access_ids {
+            let csv_row = vec![
+                format!("StopArea:{}", sa.id),
+                format!("StationAccess:{}", access_id),
             ];
             wtr.serialize(csv_row).unwrap();
         }
